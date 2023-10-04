@@ -1,0 +1,49 @@
+import cv2
+import numpy as np
+
+
+img = cv2.imread('blob.jpeg')
+flag_img = cv2.imread('Flag_of_the_United_Kingdom_(1-2).svg.png')
+
+
+cv2.imshow('Architectural Image', img)
+
+# List to store positions in the image
+positions = []
+
+def get_position(event, x, y, flags, param):
+    if event == cv2.EVENT_LBUTTONDOWN:  # Left mouse button clicked
+        # Print and store the position
+        print(f'Position in  Image: x={x}, y={y}')
+        positions.append([x, y])
+
+
+cv2.setMouseCallback(' Image', get_position)
+
+
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
+# Check if four positions in the a image have been selected
+if len(positions) == 4:
+    # Define corresponding points in the image
+    pts = np.array(positions, dtype=np.float32)
+
+    # Corresponding points in the flag image
+    pts_flag = np.array([[0, 0], [flag_img.shape[1], 0], [flag_img.shape[1], flag_img.shape[0]], [0, flag_img.shape[0]]], dtype=np.float32)
+
+    # Compute the homography matrix
+    homography_matrix, _ = cv2.findHomography(pts_flag, pts)
+
+    # Warp the flag image onto the  image
+    warped_flag = cv2.warpPerspective(flag_img, homography_matrix, (img.shape[1], img.shape[0]))
+
+    # Blend the warped flag onto the aimage
+    result = cv2.addWeighted(img, 1, warped_flag, 0.5, 0)
+
+    # Display the superimposed image
+    cv2.imshow('Superimposed Image', result)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+else:
+    print('Please select four positions in the image.')
