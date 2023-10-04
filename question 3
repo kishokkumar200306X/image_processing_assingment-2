@@ -6,7 +6,7 @@ img = cv2.imread('blob.jpeg')
 flag_img = cv2.imread('Flag_of_the_United_Kingdom_(1-2).svg.png')
 
 
-cv2.imshow('Architectural Image', img)
+cv2.imshow('Image', img)
 
 # List to store positions in the image
 positions = []
