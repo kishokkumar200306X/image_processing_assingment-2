@@ -1,0 +1,37 @@
+import cv2 as cv
+import numpy as np
+
+im = cv.imread('images/the_berry_farms_sunflower_field.jpeg', cv.IMREAD_REDUCED_COLOR_4)
+gray = cv.cvtColor(im, cv.COLOR_BGR2GRAY)
+sigma_values = np.arange(1, 10, 0.5)
+circles = []
+
+for sigma in sigma_values:
+    blurred = cv.GaussianBlur(gray, (0, 0), sigmaX=sigma, sigmaY=sigma)
+    laplacian = cv.Laplacian(blurred, cv.CV_64F)
+    negative_laplacian = -laplacian
+    _, max_val, _, max_loc = cv.minMaxLoc(negative_laplacian)
+    threshold = 0.2 * max_val
+    if max_val > threshold:
+        radius = int(sigma * 2)
+        center = max_loc
+        circles.append((center, radius, sigma))
+
+circles.sort(key=lambda x: -x[1])
+
+if circles:
+    largest_circle = circles[0]
+    center, radius, sigma = largest_circle
+    print(f"Center = {center}, Radius = {radius}, Sigma = {sigma}")
+else:
+    print("No circles detected.")
+
+if largest_circle:
+    im_with_circle = im.copy()
+    center = tuple(map(int, center))
+    cv.circle(im_with_circle, center, radius, (0, 255, 0), 2)
+    cv.imshow('Largest Circle', im_with_circle)
+    cv.waitKey(0)
+    cv.destroyAllWindows()
+
+print(f"Range of σ values used: {sigma_values[0]} to {sigma_values[-1]}")
