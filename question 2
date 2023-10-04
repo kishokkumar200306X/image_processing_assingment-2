@@ -1,0 +1,146 @@
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Function to fit a line through points using least squares
+def fit_line(points):
+    A = np.vstack([points[:, 0], np.ones(len(points))]).T
+    m, c = np.linalg.lstsq(A, points[:, 1], rcond=None)[0]
+    a = -m
+    b = 1
+    d = -c
+    # Normalize the line parameters
+    norm = np.linalg.norm([a, b])
+    a /= norm
+    b /= norm
+    d /= norm
+    return a, b, d
+
+# Function to fit a circle through points using least squares
+def fit_circle(points):
+    x_m, y_m = np.mean(points, axis=0)
+    u = points - [x_m, y_m]
+    lengths = np.linalg.norm(u, axis=1)
+    r = np.mean(lengths)
+    return x_m, y_m, r
+
+# Generate noisy point set X
+np.random.seed(0)
+N = 100
+half_n = N // 2
+r = 10
+x0_gt, y0_gt = 2, 3  # Center
+s = r / 16
+t = np.random.uniform(0, 2 * np.pi, half_n)
+n = s * np.random.randn(half_n)
+x, y = x0_gt + (r + n) * np.cos(t), y0_gt + (r + n) * np.sin(t)
+X_circ = np.hstack((x.reshape(half_n, 1), y.reshape(half_n, 1)))
+s = 1.
+m, b = -1, 2
+x = np.linspace(-12, 12, half_n)
+y = m * x + b + s * np.random.randn(half_n)
+X_line = np.hstack((x.reshape(half_n, 1), y.reshape(half_n, 1)))
+X = np.vstack((X_circ, X_line))
+
+# RANSAC parameters for line estimation
+max_iterations_line = 1000
+line_error_threshold = 0.3
+line_consensus_size = 2
+
+best_line_params = None
+best_line_inliers = []
+
+for _ in range(max_iterations_line):
+    random_indices = np.random.choice(len(X), line_consensus_size, replace=False)
+    random_points = X[random_indices]
+
+    line_params = fit_line(random_points)
+
+    distances = np.abs(np.dot(X, line_params[:2]) - line_params[2]) / np.linalg.norm(line_params[:2])
+    
+    inliers = X[distances < line_error_threshold]
+
+    if len(inliers) > len(best_line_inliers):
+        best_line_inliers = inliers
+        best_line_params = line_params
+
+# Normalize the best line parameters
+best_line_params = np.array(best_line_params)
+best_line_params[:2] /= np.linalg.norm(best_line_params[:2])
+
+# Subtract the consensus of the best line (remnant)
+remnant = X[~np.isin(X, best_line_inliers).all(axis=1)]
+
+# RANSAC parameters for circle estimation
+max_iterations_circle = 1000
+circle_error_threshold = 0.4
+circle_consensus_size = 3
+
+best_circle_params = None
+best_circle_inliers = []
+
+for _ in range(max_iterations_circle):
+    random_indices = np.random.choice(len(remnant), circle_consensus_size, replace=False)
+    random_points = remnant[random_indices]
+
+    circle_params = fit_circle(random_points)
+
+    radial_distances = np.linalg.norm(remnant - circle_params[:2], axis=1) - circle_params[2]
+
+    inliers = remnant[np.abs(radial_distances) < circle_error_threshold]
+
+    if len(inliers) > len(best_circle_inliers):
+        best_circle_inliers = inliers
+        best_circle_params = circle_params
+
+# Plot
+fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+ax.scatter(X[:, 0], X[:, 1], label="All Points")
+
+# Plot the RANSAC estimated line
+ransac_line_x = np.array([best_line_params[2] - 4 * best_line_params[0], best_line_params[2] + 4 * best_line_params[0]])
+ransac_line_y = (best_line_params[2] - best_line_params[0] * ransac_line_x) / best_line_params[1]
+ax.plot(ransac_line_x, ransac_line_y, label="RANSAC Line", color='orange', linestyle='--')
+
+
+# # Plot the best-fit line
+# line_x = np.array([best_line_params[2] - 2 * best_line_params[0], best_line_params[2] + 2 * best_line_params[0]])
+# line_y = (best_line_params[2] - best_line_params[0] * line_x) / best_line_params[1]
+# ax.plot(line_x, line_y, label="Best Fit Line", color='red')
+
+# Plot the best-fit circle
+circle = plt.Circle((best_circle_params[0], best_circle_params[1]), best_circle_params[2],
+                    color='blue', fill=False, label="Best Fit Circle")
+ax.add_patch(circle)
+
+# Plot the sample of three points used for circle estimation
+sample_points_x = random_points[:, 0]
+sample_points_y = random_points[:, 1]
+ax.scatter(sample_points_x, sample_points_y, label="Sampled Points for Circle", color='green', marker='x')
+
+# Plot line inliers
+ax.scatter(best_line_inliers[:, 0], best_line_inliers[:, 1], label="Line Inliers", color='red', alpha=0.5)
+
+# Plot circle inliers
+ax.scatter(best_circle_inliers[:, 0], best_circle_inliers[:, 1], label="Circle Inliers", color='blue', alpha=0.5)
+
+# Ground truth circle
+circle_gt = plt.Circle((x0_gt, y0_gt), r, color='magenta', fill=False, label="Ground Truth Circle")
+ax.add_patch(circle_gt)
+
+# Ground truth line
+x_min, x_max = ax.get_xlim()
+x_ = np.array([x_min, x_max])
+y_ = m * x_ + b
+ax.plot(x_, y_, color='purple', linestyle='--', label="Ground Truth Line")
+
+# Set axis limits to ensure everything is visible
+ax.set_xlim(-15, 15)
+ax.set_ylim(-15, 15)
+
+# Add legend
+ax.legend()
+
+plt.axis('equal')
+plt.show()
