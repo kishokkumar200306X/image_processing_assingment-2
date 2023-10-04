@@ -1,0 +1,98 @@
+import cv2
+import numpy as np
+
+# Load images
+img1 = cv2.imread('img1.ppm')
+img5 = cv2.imread('img5.ppm')
+
+# Convert images to grayscale
+gray_img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+gray_img5 = cv2.cvtColor(img5, cv2.COLOR_BGR2GRAY)
+
+# Create SIFT detector
+sift = cv2.SIFT_create()
+
+# Find keypoints and descriptors
+keypoints1, descriptors1 = sift.detectAndCompute(gray_img1, None)
+keypoints5, descriptors5 = sift.detectAndCompute(gray_img5, None)
+
+# Create a BFMatcher (Brute Force Matcher)
+bf = cv2.BFMatcher()
+
+# Match descriptors
+matches = bf.knnMatch(descriptors1, descriptors5, k=2)
+
+# Apply ratio test to select good matches
+good_matches = []
+for m, n in matches:
+    if m.distance < 0.75 * n.distance:
+        good_matches.append(m)
+
+# Draw the matches
+match_img = cv2.drawMatches(img1, keypoints1, img5, keypoints5, good_matches, None)
+
+# Display the matched image
+cv2.imshow('Matches', match_img)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
+# Extract matched keypoints
+src_pts = np.float32([keypoints1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+dst_pts = np.float32([keypoints5[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+
+
+
+# # Extract matched keypoints
+# src_pts = np.float32([keypoints1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+# dst_pts = np.float32([keypoints5[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+
+# Define RANSAC parameters
+num_iterations = 1000
+inlier_threshold =0.7
+
+best_homography = None
+best_inliers = []
+best_inlier_count = 0
+
+for _ in range(num_iterations):
+    # Randomly sample four point correspondences
+    sample_indices = np.random.choice(len(src_pts), 4, replace=False)
+    src_sample = src_pts[sample_indices]
+    dst_sample = dst_pts[sample_indices]
+
+    # Calculate the homography matrix from the sampled points
+    homography = cv2.findHomography(src_sample, dst_sample, cv2.RANSAC)[0]
+
+    # Warp source points to the destination
+    warped_src_pts = cv2.perspectiveTransform(src_pts, homography)
+
+    # Calculate Euclidean distances
+    distances = np.linalg.norm(warped_src_pts - dst_pts, axis=2)
+
+    # Count inliers (points within the threshold)
+    inliers = distances < inlier_threshold
+    inlier_count = np.sum(inliers)
+
+    # Update best homography if more inliers found
+    if inlier_count > best_inlier_count:
+        best_homography = homography
+        best_inliers = inliers
+        best_inlier_count = inlier_count
+
+# Compare with provided homography if available
+# provided_homography = np.array([[graf.tar.gz]])
+# if provided_homography is not None:
+#     comparison = np.allclose(best_homography, provided_homography, atol=1e-3)
+#     print("Homography comparison result:", comparison)
+
+print("Homography result:", best_homography)
+# Warp img1 onto img5 using the computed homography
+stitched_image = cv2.warpPerspective(img1, homography, (img5.shape[1], img5.shape[0]))
+
+# Combine the two images (simplest blending)
+result = cv2.addWeighted(img5, 0.5, stitched_image, 0.5, 0)
+
+# Display the stitched image
+cv2.imshow('Stitched Image', result)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
